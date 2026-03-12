@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { Layers, Code, AlertCircle, Download, DownloadCloud, Pencil, Check, X } from 'lucide-react'
+import JSZip from 'jszip'
 
 async function downloadImage(url, filename) {
   try {
@@ -18,14 +19,49 @@ async function downloadImage(url, filename) {
   }
 }
 
-async function downloadAll(results) {
+async function downloadAllAsZip(results) {
   const slides = results.filter(r => r.compositeUrl && !r.error)
+  const zip = new JSZip()
+
   for (let i = 0; i < slides.length; i++) {
-    await downloadImage(slides[i].compositeUrl, `slide-${i + 1}.png`)
-    if (i < slides.length - 1) {
-      await new Promise(r => setTimeout(r, 500))
+    const res = await fetch(slides[i].compositeUrl)
+    const blob = await res.blob()
+    zip.file(`slide-${String(i + 1).padStart(2, '0')}.png`, blob)
+  }
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+  const blobUrl = URL.createObjectURL(zipBlob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = 'slides.zip'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(blobUrl)
+}
+
+function ZipDownloadButton({ results }) {
+  const [zipping, setZipping] = useState(false)
+
+  const handleClick = async () => {
+    setZipping(true)
+    try {
+      await downloadAllAsZip(results)
+    } finally {
+      setZipping(false)
     }
   }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={zipping}
+      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50"
+    >
+      <DownloadCloud size={14} />
+      {zipping ? 'ZIP作成中...' : 'ZIPでダウンロード'}
+    </button>
+  )
 }
 
 function EditableSlide({ item, displayIndex, onRecomposite }) {
@@ -184,12 +220,7 @@ export default function OutputFeed({ results, statusMessage, onRecomposite }) {
       {successResults.length > 0 && !statusMessage && (
         <div className="flex items-center justify-between mb-3 flex-shrink-0">
           <span className="text-xs text-white/40">{successResults.length} 枚のスライドを生成済み</span>
-          <button
-            onClick={() => downloadAll(results)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition"
-          >
-            <DownloadCloud size={14} /> すべてダウンロード
-          </button>
+          <ZipDownloadButton results={results} />
         </div>
       )}
 
