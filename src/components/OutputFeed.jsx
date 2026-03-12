@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react'
-import { ImageIcon, Code, AlertCircle, Download, DownloadCloud, Layers } from 'lucide-react'
+import React, { useRef, useEffect, useState } from 'react'
+import { Layers, Code, AlertCircle, Download, DownloadCloud, Pencil, Check, X } from 'lucide-react'
 
 async function downloadImage(url, filename) {
   try {
@@ -21,14 +21,142 @@ async function downloadImage(url, filename) {
 async function downloadAll(results) {
   const slides = results.filter(r => r.compositeUrl && !r.error)
   for (let i = 0; i < slides.length; i++) {
-    await downloadImage(slides[i].compositeUrl, `slide-${slides[i].index + 1}.png`)
+    await downloadImage(slides[i].compositeUrl, `slide-${i + 1}.png`)
     if (i < slides.length - 1) {
       await new Promise(r => setTimeout(r, 500))
     }
   }
 }
 
-export default function OutputFeed({ results, statusMessage }) {
+function EditableSlide({ item, displayIndex, onRecomposite }) {
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const startEdit = () => {
+    setEditText(item.pageText || item.slideText || '')
+    setEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setEditing(false)
+  }
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await onRecomposite(item._resultIndex, editText)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="glass-dark p-4 animate-fade-in-up">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
+          スライド {displayIndex}
+          {item.isTitle && ' (タイトル)'}
+          {item.totalPages > 1 && ` [${item.pageIndex + 1}/${item.totalPages}]`}
+        </span>
+        {item.error && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 flex items-center gap-1">
+            <AlertCircle size={10} /> エラー
+          </span>
+        )}
+      </div>
+
+      {item.error ? (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+          <p className="text-sm text-red-300">{item.error}</p>
+        </div>
+      ) : (
+        <>
+          {/* 合成済みスライド画像 */}
+          {item.compositeUrl && (
+            <div className="mb-3 relative group">
+              <img
+                src={item.compositeUrl}
+                alt={`スライド ${displayIndex}`}
+                className="w-full rounded-lg"
+                loading="lazy"
+              />
+              <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition">
+                <button
+                  onClick={startEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs hover:bg-black/80"
+                  title="テキストを編集"
+                >
+                  <Pencil size={13} /> 編集
+                </button>
+                <button
+                  onClick={() => downloadImage(item.compositeUrl, `slide-${displayIndex}.png`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs hover:bg-black/80"
+                  title="ダウンロード"
+                >
+                  <Download size={13} /> 保存
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* テキスト編集UI */}
+          {editing && (
+            <div className="mb-3 p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+              <p className="text-xs text-violet-300 mb-2">テキストを編集（改行位置を調整できます）</p>
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full p-3 rounded-lg glass-dark text-sm text-white/90 leading-relaxed font-mono min-h-[120px]"
+                spellCheck={false}
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={saveEdit}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50"
+                >
+                  <Check size={13} /> {saving ? '合成中...' : '再合成'}
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium glass-dark text-white/60 hover:text-white/90 transition"
+                >
+                  <X size={13} /> キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 詳細 */}
+          {(item.slideText || item.yamlPrompt) && (
+            <details className="group">
+              <summary className="flex items-center gap-2 text-xs text-white/40 cursor-pointer hover:text-white/60 transition">
+                <Code size={12} /> 原稿テキスト・YAMLプロンプト
+              </summary>
+              <div className="mt-2 space-y-2">
+                {item.pageText && (
+                  <pre className="p-3 rounded-lg bg-black/30 text-xs text-white/60 overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono">
+                    {item.pageText}
+                  </pre>
+                )}
+                {item.yamlPrompt && (
+                  <pre className="p-3 rounded-lg bg-black/30 text-xs text-white/60 overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono">
+                    {item.yamlPrompt}
+                  </pre>
+                )}
+              </div>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function OutputFeed({ results, statusMessage, onRecomposite }) {
   const feedRef = useRef(null)
 
   useEffect(() => {
@@ -60,96 +188,21 @@ export default function OutputFeed({ results, statusMessage }) {
             onClick={() => downloadAll(results)}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition"
           >
-            <DownloadCloud size={14} />
-            すべてダウンロード
+            <DownloadCloud size={14} /> すべてダウンロード
           </button>
         </div>
       )}
 
       <div ref={feedRef} className="flex-1 overflow-y-auto space-y-4 pr-1">
         {results.map((item, i) => (
-          <div
-            key={i}
-            className="glass-dark p-4 animate-fade-in-up"
-            style={{ animationDelay: `${i * 0.1}s` }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
-                スライド {item.index + 1}
-                {item.isTitle && ' (タイトル)'}
-              </span>
-              {item.error && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 flex items-center gap-1">
-                  <AlertCircle size={10} />
-                  エラー
-                </span>
-              )}
-            </div>
-
-            {item.error ? (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                <p className="text-sm text-red-300">{item.error}</p>
-              </div>
-            ) : (
-              <>
-                {/* 合成済みスライド画像 */}
-                {item.compositeUrl && (
-                  <div className="mb-3 relative group">
-                    <img
-                      src={item.compositeUrl}
-                      alt={`スライド ${item.index + 1}`}
-                      className="w-full rounded-lg"
-                      loading="lazy"
-                    />
-                    <button
-                      onClick={() => downloadImage(item.compositeUrl, `slide-${item.index + 1}.png`)}
-                      className="absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 transition hover:bg-black/80"
-                      title="ダウンロード"
-                    >
-                      <Download size={13} />
-                      保存
-                    </button>
-                  </div>
-                )}
-
-                {/* 背景画像のみ（合成前） */}
-                {item.bgImageUrl && !item.compositeUrl && (
-                  <div className="mb-3">
-                    <p className="text-xs text-white/40 mb-1">背景画像（テキスト合成待ち）</p>
-                    <img
-                      src={item.bgImageUrl}
-                      alt={`背景 ${item.index + 1}`}
-                      className="w-full rounded-lg opacity-60"
-                      loading="lazy"
-                    />
-                  </div>
-                )}
-
-                {/* スライドテキスト */}
-                {item.slideText && (
-                  <details className="group">
-                    <summary className="flex items-center gap-2 text-xs text-white/40 cursor-pointer hover:text-white/60 transition">
-                      <Code size={12} />
-                      原稿テキスト・YAMLプロンプト
-                    </summary>
-                    <div className="mt-2 space-y-2">
-                      <pre className="p-3 rounded-lg bg-black/30 text-xs text-white/60 overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono">
-                        {item.slideText}
-                      </pre>
-                      {item.yamlPrompt && (
-                        <pre className="p-3 rounded-lg bg-black/30 text-xs text-white/60 overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono">
-                          {item.yamlPrompt}
-                        </pre>
-                      )}
-                    </div>
-                  </details>
-                )}
-              </>
-            )}
-          </div>
+          <EditableSlide
+            key={`${item.index}-${item.pageIndex || 0}-${i}`}
+            item={{ ...item, _resultIndex: i }}
+            displayIndex={i + 1}
+            onRecomposite={onRecomposite}
+          />
         ))}
 
-        {/* ステータス */}
         {statusMessage && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-violet-500/10 border border-violet-500/20 animate-fade-in-up">
             <div className="w-2 h-2 rounded-full bg-violet-400 pulse-dot" />

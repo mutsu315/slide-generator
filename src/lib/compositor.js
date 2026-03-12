@@ -3,6 +3,9 @@
  *
  * 背景画像の上にデザインルールに従ってテキストを合成し、
  * 完成スライド画像を出力する。
+ *
+ * テキストが1枚に収まらない場合は、同じ背景で複数ページに自動分割。
+ * 各関数は [{ url, pageText }] の配列を返す。
  */
 
 const SLIDE_WIDTH = 1920
@@ -24,11 +27,11 @@ async function ensureFont(fontFamily, weight) {
   try {
     await document.fonts.load(`${weight} 48px "${fontFamily}"`)
   } catch {
-    // フォールバック: フォントが読み込めなくてもCanvas描画を続行
+    // フォールバック
   }
 }
 
-/** テキストを指定幅で折り返す */
+/** テキストを指定幅で折り返し、各行を返す */
 function wrapText(ctx, text, maxWidth) {
   const lines = []
   const paragraphs = text.split('\n')
@@ -73,6 +76,42 @@ function drawCover(ctx, img, dx, dy, dw, dh) {
   ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh)
 }
 
+/**
+ * 段落単位でページ分割する
+ * paragraphs: 原文の行（\n split）
+ * ctx: measureText用のCanvasコンテキスト
+ * maxWidth: テキストボックスの幅
+ * maxLinesPerPage: 1ページの最大行数
+ * → ページごとのテキスト文字列の配列を返す
+ */
+function splitIntoPages(paragraphs, ctx, maxWidth, maxLinesPerPage) {
+  const pages = []
+  let currentPageParas = []
+  let currentLineCount = 0
+
+  for (const para of paragraphs) {
+    const visualLines = para.trim() === ''
+      ? 1
+      : wrapText(ctx, para, maxWidth).length
+
+    if (currentLineCount + visualLines > maxLinesPerPage && currentPageParas.length > 0) {
+      // 現在のページを確定、新しいページへ
+      pages.push(currentPageParas.join('\n'))
+      currentPageParas = [para]
+      currentLineCount = visualLines
+    } else {
+      currentPageParas.push(para)
+      currentLineCount += visualLines
+    }
+  }
+
+  if (currentPageParas.length > 0) {
+    pages.push(currentPageParas.join('\n'))
+  }
+
+  return pages
+}
+
 // ── スライド1（タイトル・目次）─────────────────────────
 
 export async function compositeTitle(bgImageUrl, text, options = {}) {
@@ -85,6 +124,15 @@ export async function compositeTitle(bgImageUrl, text, options = {}) {
 
   await ensureFont(fontFamily, fontWeight)
   await ensureFont(fontFamily, '300')
+  await ensureFont(fontFamily, '500')
+
+  const bgImg = await loadImage(bgImageUrl)
+  const url = renderTitleSlide(bgImg, text, { fontFamily, fontWeight, titleFontSize, itemFontSize })
+  return [{ url, pageText: text }]
+}
+
+function renderTitleSlide(bgImg, text, opts) {
+  const { fontFamily, fontWeight, titleFontSize, itemFontSize } = opts
 
   const canvas = document.createElement('canvas')
   canvas.width = SLIDE_WIDTH
@@ -99,7 +147,6 @@ export async function compositeTitle(bgImageUrl, text, options = {}) {
   ctx.fillRect(0, 0, leftW, SLIDE_HEIGHT)
 
   // 右側: 背景画像
-  const bgImg = await loadImage(bgImageUrl)
   drawCover(ctx, bgImg, leftW, 0, rightW, SLIDE_HEIGHT)
 
   // テキスト解析
@@ -136,7 +183,6 @@ export async function compositeTitle(bgImageUrl, text, options = {}) {
 
     for (const item of items) {
       ctx.font = `500 ${itemFontSize}px "${fontFamily}"`
-      // 数字部分は赤
       const numMatch = item.match(/^(\d+[\.\)）]?\s*)(.*)/)
       if (numMatch) {
         ctx.fillStyle = '#DC2626'
@@ -162,17 +208,14 @@ export async function compositeTitle(bgImageUrl, text, options = {}) {
 
     for (let i = 0; i < rightItems.length; i++) {
       const y = rStartY + i * rLineH
-      // 半透明白背景
       const textW = ctx.measureText(rightItems[i]).width
       ctx.fillStyle = 'rgba(255,255,255,0.7)'
       ctx.fillRect(leftW + 40, y - rItemSize - 4, textW + 70, rItemSize * 1.8)
 
-      // チェックマーク
       ctx.fillStyle = '#16A34A'
       ctx.font = `${fontWeight} ${rItemSize}px sans-serif`
       ctx.fillText('✓', leftW + 50, y)
 
-      // テキスト
       ctx.fillStyle = '#000000'
       ctx.font = `${fontWeight} ${rItemSize}px "${fontFamily}"`
       ctx.fillText(rightItems[i], leftW + 85, y)
@@ -193,13 +236,46 @@ export async function compositeContent(bgImageUrl, text, options = {}) {
 
   await ensureFont(fontFamily, fontWeight)
 
+  const bgImg = await loadImage(bgImageUrl)
+
+  // テキスト分割用の計測
+  const measureCanvas = document.createElement('canvas')
+  const measureCtx = measureCanvas.getContext('2d')
+  measureCtx.font = `${fontWeight} ${contentFontSize}px "${fontFamily}"`
+
+  const boxPadX = 30
+  const boxPadY = 20
+  const maxTextW = SLIDE_WIDTH * 0.42 - boxPadX * 2
+  const lineH = contentFontSize * 1.5
+  const maxBoxH = SLIDE_HEIGHT - 120
+  const maxLinesPerPage = Math.floor((maxBoxH - boxPadY * 2) / lineH)
+
+  // 段落単位でページ分割
+  const paragraphs = text.split('\n')
+  const pageTexts = splitIntoPages(paragraphs, measureCtx, maxTextW, maxLinesPerPage)
+
+  // 各ページをレンダリング
+  const results = []
+  for (const pageText of pageTexts) {
+    const url = renderContentSlide(bgImg, pageText, {
+      fontFamily, fontWeight, contentFontSize, boxPadX, boxPadY, maxTextW, lineH,
+    })
+    results.push({ url, pageText })
+  }
+
+  return results
+}
+
+function renderContentSlide(bgImg, text, opts) {
+  const { fontFamily, fontWeight, contentFontSize, boxPadX, boxPadY, lineH } = opts
+  const maxTextW = SLIDE_WIDTH * 0.42 - boxPadX * 2
+
   const canvas = document.createElement('canvas')
   canvas.width = SLIDE_WIDTH
   canvas.height = SLIDE_HEIGHT
   const ctx = canvas.getContext('2d')
 
   // 背景画像（全面）
-  const bgImg = await loadImage(bgImageUrl)
   drawCover(ctx, bgImg, 0, 0, SLIDE_WIDTH, SLIDE_HEIGHT)
 
   // 黒グラデーション（40%）
@@ -208,20 +284,16 @@ export async function compositeContent(bgImageUrl, text, options = {}) {
 
   // テキスト計算
   ctx.font = `${fontWeight} ${contentFontSize}px "${fontFamily}"`
-  const boxPadX = 30
-  const boxPadY = 20
-  const maxTextW = SLIDE_WIDTH * 0.42
   const textLines = wrapText(ctx, text.trim(), maxTextW)
-  const lineH = contentFontSize * 1.5
 
-  const boxW = maxTextW + boxPadX * 2
+  const fullBoxW = maxTextW + boxPadX * 2
   const boxH = textLines.length * lineH + boxPadY * 2 + contentFontSize * 0.3
   const boxX = 80
   const boxY = (SLIDE_HEIGHT - boxH) / 2
 
   // 白テキストボックス（角丸なし・影なし）
   ctx.fillStyle = '#FFFFFF'
-  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.fillRect(boxX, boxY, fullBoxW, boxH)
 
   // テキスト描画
   ctx.fillStyle = '#000000'
@@ -236,4 +308,30 @@ export async function compositeContent(bgImageUrl, text, options = {}) {
   }
 
   return canvas.toDataURL('image/png')
+}
+
+// ── 単一ページ再合成（編集用）────────────────────────
+
+export async function recomposite(bgImageUrl, pageText, isTitle, options = {}) {
+  if (isTitle) {
+    const results = await compositeTitle(bgImageUrl, pageText, options)
+    return results[0].url
+  }
+
+  const {
+    fontFamily = 'Noto Sans JP',
+    fontWeight = '700',
+    contentFontSize = 44,
+  } = options
+
+  await ensureFont(fontFamily, fontWeight)
+
+  const bgImg = await loadImage(bgImageUrl)
+  const boxPadX = 30
+  const boxPadY = 20
+  const lineH = contentFontSize * 1.5
+
+  return renderContentSlide(bgImg, pageText, {
+    fontFamily, fontWeight, contentFontSize, boxPadX, boxPadY, lineH,
+  })
 }

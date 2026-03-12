@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar'
 import ScriptInput from './components/ScriptInput'
 import OutputFeed from './components/OutputFeed'
 import { runPipeline } from './lib/engine'
-import { compositeTitle, compositeContent } from './lib/compositor'
+import { compositeTitle, compositeContent, recomposite } from './lib/compositor'
 import { getAllCharacterImages } from './lib/storage'
 
 export default function App() {
@@ -43,7 +43,6 @@ export default function App() {
       return
     }
 
-    // キャラクター情報
     let characterDescription = ''
     let characterImageDataUrl = null
     const chars = await getAllCharacterImages()
@@ -82,7 +81,6 @@ export default function App() {
             case 'yaml-complete':
               break
             case 'slide-complete': {
-              // 背景画像完成 → Canvas合成
               const r = event.result
               setStatusMessage(`スライド ${event.index + 1}/${event.total}: テキスト合成中...`)
 
@@ -91,13 +89,22 @@ export default function App() {
                   fontFamily: config.fontFamily,
                   fontWeight: config.fontWeight,
                 }
-                const compositeUrl = r.isTitle
+                // compositeTitle / compositeContent は [{ url, pageText }] を返す
+                const pages = r.isTitle
                   ? await compositeTitle(r.bgImageUrl, r.slideText, compositeOpts)
                   : await compositeContent(r.bgImageUrl, r.slideText, compositeOpts)
 
-                setResults((prev) => [...prev, { ...r, compositeUrl }])
+                // ページ分割結果をresultsに追加
+                const newItems = pages.map((page, pi) => ({
+                  ...r,
+                  compositeUrl: page.url,
+                  pageText: page.pageText,
+                  pageIndex: pi,
+                  totalPages: pages.length,
+                }))
+
+                setResults((prev) => [...prev, ...newItems])
               } catch (compErr) {
-                // 合成失敗時は背景画像のみ表示
                 console.error('[compositor] error:', compErr)
                 setResults((prev) => [...prev, r])
               }
@@ -112,7 +119,7 @@ export default function App() {
               setStatusMessage(`生成を停止しました（${event.completedCount} 枚生成済み）`)
               break
             case 'done':
-              setStatusMessage(`全 ${event.results.length} 枚のスライド生成が完了しました`)
+              setStatusMessage('スライド生成が完了しました')
               break
           }
         },
@@ -134,6 +141,38 @@ export default function App() {
     }
   }
 
+  // テキスト編集 → 同じ背景で再合成
+  const handleRecomposite = useCallback(async (resultIndex, newText) => {
+    setResults((prev) => {
+      const target = prev[resultIndex]
+      if (!target || !target.bgImageUrl) return prev
+
+      // 非同期で再合成して結果を更新
+      const compositeOpts = {
+        fontFamily: config.fontFamily,
+        fontWeight: config.fontWeight,
+      }
+
+      recomposite(target.bgImageUrl, newText, target.isTitle, compositeOpts)
+        .then((newUrl) => {
+          setResults((curr) => {
+            const updated = [...curr]
+            updated[resultIndex] = {
+              ...updated[resultIndex],
+              compositeUrl: newUrl,
+              pageText: newText,
+            }
+            return updated
+          })
+        })
+        .catch((err) => {
+          console.error('[recomposite] error:', err)
+        })
+
+      return prev
+    })
+  }, [config.fontFamily, config.fontWeight])
+
   return (
     <div className="h-screen flex">
       <Sidebar config={config} onConfigChange={handleConfigChange} />
@@ -147,12 +186,10 @@ export default function App() {
         </header>
 
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* 原稿入力 */}
           <div className="glass p-4 flex-shrink-0" style={{ maxHeight: '35vh' }}>
             <ScriptInput script={script} onScriptChange={setScript} />
           </div>
 
-          {/* 操作ボタン */}
           <div className="flex items-center gap-3 flex-shrink-0">
             <button
               onClick={handleGenerate}
@@ -182,11 +219,11 @@ export default function App() {
             )}
           </div>
 
-          {/* 出力フィード */}
           <div className="glass p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
             <OutputFeed
               results={results}
               statusMessage={isGenerating ? statusMessage : ''}
+              onRecomposite={handleRecomposite}
             />
           </div>
         </div>
