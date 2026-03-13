@@ -60,6 +60,7 @@ export default function Sidebar({ config, onConfigChange }) {
       fontWeight: localStorage.getItem('slide-gen-font-weight') || '700',
       characterRoles: JSON.parse(localStorage.getItem('slide-gen-char-roles') || '{}'),
       selectedCharacterIds: JSON.parse(localStorage.getItem('slide-gen-selected-chars') || '[]'),
+      globalInstruction: localStorage.getItem('slide-gen-global-instruction') || '',
     }
     onConfigChange(saved)
   }, [])
@@ -86,6 +87,7 @@ export default function Sidebar({ config, onConfigChange }) {
       model: 'slide-gen-image-model',
       fontFamily: 'slide-gen-font-family',
       fontWeight: 'slide-gen-font-weight',
+      globalInstruction: 'slide-gen-global-instruction',
     }
     if (storageMap[key] && value != null) {
       localStorage.setItem(storageMap[key], value)
@@ -295,6 +297,20 @@ export default function Sidebar({ config, onConfigChange }) {
         </p>
       </div>
 
+      {/* 全体指示 */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs text-violet-300 mb-1">画像生成への全体指示</label>
+        <textarea
+          value={config.globalInstruction || ''}
+          onChange={(e) => update('globalInstruction', e.target.value)}
+          placeholder="例: 全体的に明るいトーンで、背景はシンプルにしてください"
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg glass-dark text-sm text-white/90 placeholder-white/20 resize-none"
+          spellCheck={false}
+        />
+        <p className="text-[10px] text-white/20 mt-1">全画像に共通で適用される指示（任意）</p>
+      </div>
+
       {/* キャラクター画像 */}
       <div>
         <label className="flex items-center gap-1.5 text-xs text-violet-300 mb-1">
@@ -333,7 +349,7 @@ export default function Sidebar({ config, onConfigChange }) {
                 value={role}
                 onChange={(e) => updateCharacterRole(c.id, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                placeholder="役割・指示（例: 先生役、生徒役、解説者）"
+                placeholder="例: 先生役、画面左で解説ポーズ"
                 className="w-full mt-1 px-2.5 py-1.5 rounded-lg glass-dark text-[11px] text-white/90 placeholder-white/20"
                 spellCheck={false}
               />

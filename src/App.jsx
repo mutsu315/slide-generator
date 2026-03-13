@@ -76,6 +76,14 @@ export default function App() {
       }
     }
 
+    // 全体指示を追加
+    const globalInstruction = (config.globalInstruction || '').trim()
+    if (globalInstruction) {
+      characterDescription = characterDescription
+        ? `${characterDescription}\n\n【全体指示】\n${globalInstruction}`
+        : `【全体指示】\n${globalInstruction}`
+    }
+
     setIsGenerating(true)
     setResults([])
     setStatusMessage('生成を開始しています...')
