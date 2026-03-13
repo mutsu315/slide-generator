@@ -58,7 +58,7 @@ export default function Sidebar({ config, onConfigChange }) {
       model: localStorage.getItem('slide-gen-image-model') || 'gemini-3-pro-image-preview',
       fontFamily: localStorage.getItem('slide-gen-font-family') || 'Noto Sans JP',
       fontWeight: localStorage.getItem('slide-gen-font-weight') || '700',
-      characterInstruction: localStorage.getItem('slide-gen-char-instruction') || '',
+      characterRoles: JSON.parse(localStorage.getItem('slide-gen-char-roles') || '{}'),
       selectedCharacterIds: JSON.parse(localStorage.getItem('slide-gen-selected-chars') || '[]'),
     }
     onConfigChange(saved)
@@ -86,7 +86,6 @@ export default function Sidebar({ config, onConfigChange }) {
       model: 'slide-gen-image-model',
       fontFamily: 'slide-gen-font-family',
       fontWeight: 'slide-gen-font-weight',
-      characterInstruction: 'slide-gen-char-instruction',
     }
     if (storageMap[key] && value != null) {
       localStorage.setItem(storageMap[key], value)
@@ -96,6 +95,12 @@ export default function Sidebar({ config, onConfigChange }) {
   const updateCharacterIds = (ids) => {
     onConfigChange({ selectedCharacterIds: ids })
     localStorage.setItem('slide-gen-selected-chars', JSON.stringify(ids))
+  }
+
+  const updateCharacterRole = (id, role) => {
+    const roles = { ...(config.characterRoles || {}), [id]: role }
+    onConfigChange({ characterRoles: roles })
+    localStorage.setItem('slide-gen-char-roles', JSON.stringify(roles))
   }
 
   const handleProviderChange = (provider) => {
@@ -298,28 +303,41 @@ export default function Sidebar({ config, onConfigChange }) {
 
         {characters.map(c => {
           const isSelected = (config.selectedCharacterIds || []).includes(c.id)
+          const role = (config.characterRoles || {})[c.id] || ''
           return (
-          <div
-            key={c.id}
-            onClick={() => handleToggleCharacter(c.id)}
-            className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition mb-1"
-            style={isSelected ? { outline: '2px solid #22c55e', outlineOffset: '2px' } : {}}
-          >
-            <img src={c.dataUrl} alt={c.name} className="w-10 h-10 rounded object-cover" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-white/80 truncate">{c.name}</p>
-              {isSelected ? (
-                <span className="text-[10px] text-emerald-400">選択中</span>
-              ) : (
-                <span className="text-[10px] text-white/30">クリックで選択</span>
-              )}
-            </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteCharacter(c.id) }}
-              className="text-white/20 hover:text-red-400 transition p-1"
+          <div key={c.id} className="mb-2">
+            <div
+              onClick={() => handleToggleCharacter(c.id)}
+              className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
+              style={isSelected ? { outline: '2px solid #22c55e', outlineOffset: '2px' } : {}}
             >
-              <Trash2 size={13} />
-            </button>
+              <img src={c.dataUrl} alt={c.name} className="w-10 h-10 rounded object-cover" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white/80 truncate">{c.name}</p>
+                {isSelected ? (
+                  <span className="text-[10px] text-emerald-400">選択中</span>
+                ) : (
+                  <span className="text-[10px] text-white/30">クリックで選択</span>
+                )}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteCharacter(c.id) }}
+                className="text-white/20 hover:text-red-400 transition p-1"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+            {isSelected && (
+              <input
+                type="text"
+                value={role}
+                onChange={(e) => updateCharacterRole(c.id, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="役割・指示（例: 先生役、生徒役、解説者）"
+                className="w-full mt-1 px-2.5 py-1.5 rounded-lg glass-dark text-[11px] text-white/90 placeholder-white/20"
+                spellCheck={false}
+              />
+            )}
           </div>
           )
         })}
@@ -331,21 +349,7 @@ export default function Sidebar({ config, onConfigChange }) {
           <Upload size={13} /> 画像を追加
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-        <p className="text-[10px] text-white/20 mt-1">IndexedDBに永続保存 / 複数選択可（クリックでトグル）</p>
-
-        {/* キャラクター指示 */}
-        {characters.length > 0 && (
-          <div className="mt-2">
-            <label className="text-xs text-violet-300 mb-1 block">キャラクター指示</label>
-            <textarea
-              value={config.characterInstruction || ''}
-              onChange={(e) => update('characterInstruction', e.target.value)}
-              placeholder="例: 先生役として解説しているポーズで使って / 二人が会話しているシーンにして / 画面右側に小さく配置"
-              className="w-full p-2.5 rounded-lg glass-dark text-xs text-white/90 leading-relaxed placeholder-white/20 min-h-[60px]"
-              spellCheck={false}
-            />
-          </div>
-        )}
+        <p className="text-[10px] text-white/20 mt-1">IndexedDBに永続保存 / 複数選択可 / 各キャラに役割指定可</p>
       </div>
     </aside>
   )

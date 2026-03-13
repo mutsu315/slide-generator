@@ -17,7 +17,7 @@ export default function App() {
     fontFamily: 'Noto Sans JP',
     fontWeight: '700',
     selectedCharacterIds: [],
-    characterInstruction: '',
+    characterRoles: {},
   })
 
   const [script, setScript] = useState('')
@@ -55,12 +55,23 @@ export default function App() {
       if (selectedChars.length > 0) {
         characterImageDataUrls = selectedChars.map(c => c.dataUrl)
         const charNames = selectedChars.map(c => c.name).join('、')
+        const roles = config.characterRoles || {}
+        const roleDescriptions = selectedChars
+          .map((c, i) => {
+            const role = roles[c.id]?.trim()
+            return role
+              ? `- キャラクター${i + 1}（${c.name}）: ${role}`
+              : `- キャラクター${i + 1}（${c.name}）`
+          })
+          .join('\n')
+
         const baseDesc = selectedChars.length === 1
           ? `添付のキャラクター画像を参照し、このキャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、キャラクターの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで登場させてください。`
-          : `添付の${selectedChars.length}枚のキャラクター画像をそれぞれ参照し、各キャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、全キャラクター（${charNames}）を登場させ、それぞれの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで描いてください。`
-        const userInstruction = config.characterInstruction?.trim()
-        characterDescription = userInstruction
-          ? `${baseDesc}\n\n【ユーザーからのキャラクター使用指示】\n${userInstruction}`
+          : `添付の${selectedChars.length}枚のキャラクター画像をそれぞれ参照し、各キャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、全キャラクターを登場させ、それぞれの外見を維持したまま描いてください。`
+
+        const hasRoles = selectedChars.some(c => roles[c.id]?.trim())
+        characterDescription = hasRoles
+          ? `${baseDesc}\n\n【キャラクター役割】\n${roleDescriptions}\n\n各キャラクターを指定された役割に合ったポーズ・表情・配置で描いてください。`
           : baseDesc
       }
     }
