@@ -58,6 +58,7 @@ export default function Sidebar({ config, onConfigChange }) {
       model: localStorage.getItem('slide-gen-image-model') || 'gemini-3-pro-image-preview',
       fontFamily: localStorage.getItem('slide-gen-font-family') || 'Noto Sans JP',
       fontWeight: localStorage.getItem('slide-gen-font-weight') || '700',
+      characterInstruction: localStorage.getItem('slide-gen-char-instruction') || '',
       selectedCharacterIds: JSON.parse(localStorage.getItem('slide-gen-selected-chars') || '[]'),
     }
     onConfigChange(saved)
@@ -85,6 +86,7 @@ export default function Sidebar({ config, onConfigChange }) {
       model: 'slide-gen-image-model',
       fontFamily: 'slide-gen-font-family',
       fontWeight: 'slide-gen-font-weight',
+      characterInstruction: 'slide-gen-char-instruction',
     }
     if (storageMap[key] && value != null) {
       localStorage.setItem(storageMap[key], value)
@@ -330,6 +332,20 @@ export default function Sidebar({ config, onConfigChange }) {
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
         <p className="text-[10px] text-white/20 mt-1">IndexedDBに永続保存 / 複数選択可（クリックでトグル）</p>
+
+        {/* キャラクター指示 */}
+        {characters.length > 0 && (
+          <div className="mt-2">
+            <label className="text-xs text-violet-300 mb-1 block">キャラクター指示</label>
+            <textarea
+              value={config.characterInstruction || ''}
+              onChange={(e) => update('characterInstruction', e.target.value)}
+              placeholder="例: 先生役として解説しているポーズで使って / 二人が会話しているシーンにして / 画面右側に小さく配置"
+              className="w-full p-2.5 rounded-lg glass-dark text-xs text-white/90 leading-relaxed placeholder-white/20 min-h-[60px]"
+              spellCheck={false}
+            />
+          </div>
+        )}
       </div>
     </aside>
   )

@@ -17,6 +17,7 @@ export default function App() {
     fontFamily: 'Noto Sans JP',
     fontWeight: '700',
     selectedCharacterIds: [],
+    characterInstruction: '',
   })
 
   const [script, setScript] = useState('')
@@ -54,9 +55,13 @@ export default function App() {
       if (selectedChars.length > 0) {
         characterImageDataUrls = selectedChars.map(c => c.dataUrl)
         const charNames = selectedChars.map(c => c.name).join('、')
-        characterDescription = selectedChars.length === 1
+        const baseDesc = selectedChars.length === 1
           ? `添付のキャラクター画像を参照し、このキャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、キャラクターの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで登場させてください。`
           : `添付の${selectedChars.length}枚のキャラクター画像をそれぞれ参照し、各キャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、全キャラクター（${charNames}）を登場させ、それぞれの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで描いてください。`
+        const userInstruction = config.characterInstruction?.trim()
+        characterDescription = userInstruction
+          ? `${baseDesc}\n\n【ユーザーからのキャラクター使用指示】\n${userInstruction}`
+          : baseDesc
       }
     }
 
