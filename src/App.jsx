@@ -202,11 +202,16 @@ export default function App() {
       <Sidebar config={config} onConfigChange={handleConfigChange} />
 
       <div className="flex-1 flex flex-col p-6 gap-4 overflow-hidden">
-        <header className="flex items-center gap-3">
-          <Sparkles size={24} className="text-violet-400" />
-          <h1 className="text-xl font-bold tracking-tight">
-            スライド生成システム
-          </h1>
+        <header>
+          <div className="flex items-center gap-3">
+            <Sparkles size={24} className="text-violet-400" />
+            <h1 className="text-xl font-bold tracking-tight">
+              スライド生成システム
+            </h1>
+          </div>
+          <p className="text-xs text-white/50 mt-1 ml-9">
+            原稿から背景画像を生成し、テキストを合成してスライドを作成します。
+          </p>
         </header>
 
         <div className="flex-1 flex flex-col gap-4 min-h-0">
