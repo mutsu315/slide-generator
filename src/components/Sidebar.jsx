@@ -58,7 +58,7 @@ export default function Sidebar({ config, onConfigChange }) {
       model: localStorage.getItem('slide-gen-image-model') || 'gemini-3-pro-image-preview',
       fontFamily: localStorage.getItem('slide-gen-font-family') || 'Noto Sans JP',
       fontWeight: localStorage.getItem('slide-gen-font-weight') || '700',
-      selectedCharacterId: localStorage.getItem('slide-gen-selected-char') || null,
+      selectedCharacterIds: JSON.parse(localStorage.getItem('slide-gen-selected-chars') || '[]'),
     }
     onConfigChange(saved)
   }, [])
@@ -70,8 +70,8 @@ export default function Sidebar({ config, onConfigChange }) {
 
   // 選択中キャラがなければ最初のキャラを自動選択
   useEffect(() => {
-    if (characters.length > 0 && !config.selectedCharacterId) {
-      update('selectedCharacterId', characters[0].id)
+    if (characters.length > 0 && (!config.selectedCharacterIds || config.selectedCharacterIds.length === 0)) {
+      updateCharacterIds([characters[0].id])
     }
   }, [characters])
 
@@ -85,11 +85,15 @@ export default function Sidebar({ config, onConfigChange }) {
       model: 'slide-gen-image-model',
       fontFamily: 'slide-gen-font-family',
       fontWeight: 'slide-gen-font-weight',
-      selectedCharacterId: 'slide-gen-selected-char',
     }
     if (storageMap[key] && value != null) {
       localStorage.setItem(storageMap[key], value)
     }
+  }
+
+  const updateCharacterIds = (ids) => {
+    onConfigChange({ selectedCharacterIds: ids })
+    localStorage.setItem('slide-gen-selected-chars', JSON.stringify(ids))
   }
 
   const handleProviderChange = (provider) => {
@@ -114,7 +118,7 @@ export default function Sidebar({ config, onConfigChange }) {
       await saveCharacterImage(id, file.name, dataUrl)
       const updated = await getAllCharacterImages()
       setCharacters(updated)
-      update('selectedCharacterId', id)
+      updateCharacterIds([...(config.selectedCharacterIds || []), id])
     }
     reader.readAsDataURL(file)
     e.target.value = ''
@@ -124,14 +128,20 @@ export default function Sidebar({ config, onConfigChange }) {
     await deleteCharacterImage(id)
     const updated = await getAllCharacterImages()
     setCharacters(updated)
-    if (config.selectedCharacterId === id) {
-      const newId = updated.length > 0 ? updated[0].id : null
-      update('selectedCharacterId', newId)
-    }
+    const newIds = (config.selectedCharacterIds || []).filter(cid => cid !== id)
+    updateCharacterIds(newIds.length > 0 ? newIds : (updated.length > 0 ? [updated[0].id] : []))
   }
 
-  const handleSelectCharacter = (id) => {
-    update('selectedCharacterId', id)
+  const handleToggleCharacter = (id) => {
+    const current = config.selectedCharacterIds || []
+    if (current.includes(id)) {
+      // 最低1つは残す
+      if (current.length > 1) {
+        updateCharacterIds(current.filter(cid => cid !== id))
+      }
+    } else {
+      updateCharacterIds([...current, id])
+    }
   }
 
   const isGoogle = config.provider === 'google'
@@ -284,21 +294,22 @@ export default function Sidebar({ config, onConfigChange }) {
           <Image size={12} /> キャラクター画像
         </label>
 
-        {characters.map(c => (
+        {characters.map(c => {
+          const isSelected = (config.selectedCharacterIds || []).includes(c.id)
+          return (
           <div
             key={c.id}
-            onClick={() => handleSelectCharacter(c.id)}
+            onClick={() => handleToggleCharacter(c.id)}
             className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition mb-1"
-            style={config.selectedCharacterId === c.id ? { outline: '2px solid #22c55e', outlineOffset: '2px' } : {}}
+            style={isSelected ? { outline: '2px solid #22c55e', outlineOffset: '2px' } : {}}
           >
             <img src={c.dataUrl} alt={c.name} className="w-10 h-10 rounded object-cover" />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-white/80 truncate">{c.name}</p>
-              {config.selectedCharacterId === c.id && (
-                <span className="text-[10px] text-emerald-400">使用中</span>
-              )}
-              {config.selectedCharacterId !== c.id && (
-                <span className="text-[10px] text-white/30">クリックで選択切替</span>
+              {isSelected ? (
+                <span className="text-[10px] text-emerald-400">選択中</span>
+              ) : (
+                <span className="text-[10px] text-white/30">クリックで選択</span>
               )}
             </div>
             <button
@@ -308,7 +319,8 @@ export default function Sidebar({ config, onConfigChange }) {
               <Trash2 size={13} />
             </button>
           </div>
-        ))}
+          )
+        })}
 
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -317,7 +329,7 @@ export default function Sidebar({ config, onConfigChange }) {
           <Upload size={13} /> 画像を追加
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-        <p className="text-[10px] text-white/20 mt-1">IndexedDBに永続保存 / クリックで選択切替</p>
+        <p className="text-[10px] text-white/20 mt-1">IndexedDBに永続保存 / 複数選択可（クリックでトグル）</p>
       </div>
     </aside>
   )

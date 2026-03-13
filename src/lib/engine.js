@@ -199,16 +199,18 @@ async function openaiGenerateImage(apiKey, prompt, aspectRatio, model, signal) {
 
 // ── Google Gemini + Imagen API ───────────────────────────
 
-async function geminiGenerateYaml(apiKey, slide, characterDescription, aspectRatio, llmModel, characterImageDataUrl, signal) {
+async function geminiGenerateYaml(apiKey, slide, characterDescription, aspectRatio, llmModel, characterImageDataUrls, signal) {
   const { systemPrompt, userMessage } = buildYamlPromptRequest(slide, characterDescription, aspectRatio)
 
   const geminiModel = llmModel || 'gemini-2.5-flash'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`
 
   const userParts = [{ text: userMessage }]
-  if (characterImageDataUrl) {
-    const { mimeType, base64 } = parseDataUrl(characterImageDataUrl)
-    userParts.push({ inlineData: { mimeType, data: base64 } })
+  if (characterImageDataUrls && characterImageDataUrls.length > 0) {
+    for (const dataUrl of characterImageDataUrls) {
+      const { mimeType, base64 } = parseDataUrl(dataUrl)
+      userParts.push({ inlineData: { mimeType, data: base64 } })
+    }
   }
 
   const res = await fetch(url, {
@@ -238,11 +240,11 @@ function isGeminiGenerateContentModel(model) {
   return model.startsWith('gemini-')
 }
 
-async function googleGenerateImage(apiKey, prompt, aspectRatio, model, characterImageDataUrl, signal) {
+async function googleGenerateImage(apiKey, prompt, aspectRatio, model, characterImageDataUrls, signal) {
   const targetModel = model || 'imagen-3.0-generate-002'
 
   if (isGeminiGenerateContentModel(targetModel)) {
-    return geminiGenerateContentImage(apiKey, prompt, aspectRatio, targetModel, characterImageDataUrl, signal)
+    return geminiGenerateContentImage(apiKey, prompt, aspectRatio, targetModel, characterImageDataUrls, signal)
   }
 
   return predictApiImage(apiKey, prompt, aspectRatio, targetModel, signal)
@@ -278,17 +280,22 @@ async function predictApiImage(apiKey, prompt, aspectRatio, model, signal) {
   throw new Error(`${model} から画像データを取得できませんでした。`)
 }
 
-async function geminiGenerateContentImage(apiKey, prompt, aspectRatio, model, characterImageDataUrl, signal) {
+async function geminiGenerateContentImage(apiKey, prompt, aspectRatio, model, characterImageDataUrls, signal) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
   const parts = [
     { text: `Generate a background image for a presentation slide based on the following description. Do NOT include any text or labels in the image. Aspect ratio: ${aspectRatio}.\n\n${prompt.slice(0, 3000)}` }
   ]
 
-  if (characterImageDataUrl) {
-    const { mimeType, base64 } = parseDataUrl(characterImageDataUrl)
-    parts.unshift({ text: `Below is a character reference image. Study this character's visual design carefully — hairstyle, hair color, eye color, outfit, accessories, art style, and body proportions. Then generate the slide background image featuring this SAME character but in the pose and expression described in the prompt below. Do NOT simply copy the reference image — adapt the character naturally into the scene.` })
-    parts.splice(1, 0, { inlineData: { mimeType, data: base64 } })
+  if (characterImageDataUrls && characterImageDataUrls.length > 0) {
+    const refText = characterImageDataUrls.length === 1
+      ? `Below is a character reference image. Study this character's visual design carefully — hairstyle, hair color, eye color, outfit, accessories, art style, and body proportions. Then generate the slide background image featuring this SAME character but in the pose and expression described in the prompt below. Do NOT simply copy the reference image — adapt the character naturally into the scene.`
+      : `Below are ${characterImageDataUrls.length} character reference images. Study each character's visual design carefully — hairstyle, hair color, eye color, outfit, accessories, art style, and body proportions. Then generate the slide background image featuring ALL of these characters together, each in the pose and expression described in the prompt below. Do NOT simply copy the reference images — adapt each character naturally into the scene.`
+    parts.unshift({ text: refText })
+    for (let i = 0; i < characterImageDataUrls.length; i++) {
+      const { mimeType, base64 } = parseDataUrl(characterImageDataUrls[i])
+      parts.splice(1 + i, 0, { inlineData: { mimeType, data: base64 } })
+    }
   }
 
   const res = await fetch(url, {
@@ -330,7 +337,7 @@ export async function runPipeline({
   llmModel = '',
   provider = '',
   characterDescription = '',
-  characterImageDataUrl = null,
+  characterImageDataUrls = [],
   abortController,
   onProgress,
 }) {
@@ -363,7 +370,7 @@ export async function runPipeline({
     let yamlPrompt
     try {
       if (detectedProvider === 'google') {
-        yamlPrompt = await geminiGenerateYaml(apiKey, slide, characterDescription, aspectRatio, llmModel, characterImageDataUrl, signal)
+        yamlPrompt = await geminiGenerateYaml(apiKey, slide, characterDescription, aspectRatio, llmModel, characterImageDataUrls, signal)
       } else {
         yamlPrompt = await openaiGenerateYaml(apiKey, slide, characterDescription, aspectRatio, llmModel, signal)
       }
@@ -391,7 +398,7 @@ export async function runPipeline({
     try {
       let result
       if (detectedProvider === 'google') {
-        result = await googleGenerateImage(apiKey, imagePrompt, aspectRatio, model, characterImageDataUrl, signal)
+        result = await googleGenerateImage(apiKey, imagePrompt, aspectRatio, model, characterImageDataUrls, signal)
       } else {
         result = await openaiGenerateImage(apiKey, imagePrompt, aspectRatio, model, signal)
       }

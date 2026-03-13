@@ -16,7 +16,7 @@ export default function App() {
     model: 'gemini-3-pro-image-preview',
     fontFamily: 'Noto Sans JP',
     fontWeight: '700',
-    selectedCharacterId: null,
+    selectedCharacterIds: [],
   })
 
   const [script, setScript] = useState('')
@@ -44,12 +44,20 @@ export default function App() {
     }
 
     let characterDescription = ''
-    let characterImageDataUrl = null
+    let characterImageDataUrls = []
     const chars = await getAllCharacterImages()
-    if (chars.length > 0) {
-      const selected = chars.find((c) => c.id === config.selectedCharacterId) || chars[0]
-      characterDescription = `添付のキャラクター画像を参照し、このキャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、キャラクターの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで登場させてください。`
-      characterImageDataUrl = selected.dataUrl
+    const selectedIds = config.selectedCharacterIds || []
+    if (chars.length > 0 && selectedIds.length > 0) {
+      const selectedChars = selectedIds
+        .map(id => chars.find(c => c.id === id))
+        .filter(Boolean)
+      if (selectedChars.length > 0) {
+        characterImageDataUrls = selectedChars.map(c => c.dataUrl)
+        const charNames = selectedChars.map(c => c.name).join('、')
+        characterDescription = selectedChars.length === 1
+          ? `添付のキャラクター画像を参照し、このキャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、キャラクターの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで登場させてください。`
+          : `添付の${selectedChars.length}枚のキャラクター画像をそれぞれ参照し、各キャラクターの外見的特徴を正確に読み取ってください。生成する各背景画像では、全キャラクター（${charNames}）を登場させ、それぞれの外見を維持したまま、スライドの文脈に合った自然な表情・ポーズで描いてください。`
+      }
     }
 
     setIsGenerating(true)
@@ -68,7 +76,7 @@ export default function App() {
         llmModel: config.llmModel,
         provider: config.provider,
         characterDescription,
-        characterImageDataUrl,
+        characterImageDataUrls,
         abortController: controller,
         onProgress: async (event) => {
           switch (event.type) {
