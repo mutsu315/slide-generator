@@ -12,7 +12,7 @@
 // ── パーサー ──────────────────────────────────────────────
 
 export function parseScript(text) {
-  const slides = text.split(/\n\s*---\s*\n/).map(s => s.trim()).filter(Boolean)
+  const slides = text.split(/\[---?IMAGE---?\]/gi).map(s => s.trim()).filter(Boolean)
   return slides.map((text, index) => ({
     index,
     text,
@@ -339,7 +339,7 @@ export async function runPipeline({
   const detectedProvider = provider || detectProvider(apiKey)
 
   if (slides.length === 0) {
-    throw new Error('原稿にスライドが見つかりませんでした。「---」で区切ってください。')
+    throw new Error('原稿にスライドが見つかりませんでした。[---IMAGE---] タグで区切ってください。')
   }
 
   onProgress?.({ type: 'start', total: slides.length, provider: detectedProvider })
